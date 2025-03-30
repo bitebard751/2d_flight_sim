@@ -46,6 +46,9 @@ let isGameOver = false;
 // Add background state
 let stars = [];
 
+// Add sound effects
+let shootSound;
+
 // Initialize game
 function init() {
     canvas = document.getElementById('gameCanvas');
@@ -64,6 +67,10 @@ function init() {
             speed: Math.random() * 2 + 1
         });
     }
+    
+    // Initialize sound effects
+    shootSound = new Audio('assets/sounds/shoot.mp3');
+    shootSound.volume = 0.3; // Set volume to 30%
     
     // Set up event listeners
     document.addEventListener('keydown', handleKeyDown);
@@ -197,6 +204,10 @@ function shoot() {
         console.log('Out of ammo!');
         return; // Don't shoot if out of ammo
     }
+    
+    // Play shooting sound
+    shootSound.currentTime = 0; // Reset sound to start
+    shootSound.play().catch(error => console.log('Error playing sound:', error));
     
     lastShotTime = currentTime;
     player.ammo--; // Decrease ammo count
