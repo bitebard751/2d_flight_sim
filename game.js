@@ -99,19 +99,27 @@ function update() {
 let keys = {
     ArrowUp: false,
     ArrowDown: false,
-    Space: false
+    ' ': false  // Changed from 'Space' to actual space character
 };
 
 function handleKeyDown(e) {
+    console.log('Key pressed:', e.key); // Debug log to see what key is being pressed
+    
+    if (e.key === ' ' || e.key === 'Spacebar') { // Handle both space representations
+        e.preventDefault(); // Prevent page scrolling
+        shoot();
+    }
+    
     if (keys.hasOwnProperty(e.key)) {
         keys[e.key] = true;
-        if (e.key === 'Space') {
-            shoot();
-        }
     }
 }
 
 function handleKeyUp(e) {
+    if (e.key === ' ' || e.key === 'Spacebar') {
+        keys[' '] = false;
+    }
+    
     if (keys.hasOwnProperty(e.key)) {
         keys[e.key] = false;
     }
@@ -126,15 +134,32 @@ function updatePlayer() {
     }
 }
 
+// Add shooting cooldown
+let lastShotTime = 0;
+const SHOT_COOLDOWN = 250; // milliseconds between shots
+
 // Bullet functions
 function shoot() {
-    bullets.push({
+    const currentTime = Date.now();
+    if (currentTime - lastShotTime < SHOT_COOLDOWN) {
+        console.log('Cooling down...'); // Debug log
+        return; // Don't shoot if cooldown hasn't elapsed
+    }
+    
+    lastShotTime = currentTime;
+    
+    // Create bullet at the center of the player
+    const newBullet = {
         x: player.x + player.width,
-        y: player.y + player.height / 2,
-        width: 10,
-        height: 5,
+        y: player.y + (player.height / 2) - 2.5, // Center the bullet vertically
+        width: 15, // Made bullets wider
+        height: 8, // Made bullets taller
         speed: BULLET_SPEED
-    });
+    };
+    
+    bullets.push(newBullet);
+    console.log('Bullet fired!', newBullet); // Debug log with bullet details
+    console.log('Current bullets:', bullets.length); // Debug log bullet count
 }
 
 function updateBullets() {
@@ -220,10 +245,14 @@ function draw() {
     ctx.fillStyle = '#00ff00';
     ctx.fillRect(player.x, player.y, player.width, player.height);
     
-    // Draw bullets
-    ctx.fillStyle = '#ffff00';
+    // Draw bullets with improved visibility
+    ctx.fillStyle = '#ff0000'; // Changed to bright red
     bullets.forEach(bullet => {
+        // Draw bullet with glow effect
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 10;
         ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        ctx.shadowBlur = 0; // Reset shadow
     });
     
     // Draw obstacles
@@ -237,6 +266,11 @@ function draw() {
     enemies.forEach(enemy => {
         ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
     });
+    
+    // Debug: Draw bullet count
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '20px Arial';
+    ctx.fillText(`Bullets: ${bullets.length}`, 10, 30);
 }
 
 // Game over handling
