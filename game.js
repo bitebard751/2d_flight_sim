@@ -81,6 +81,77 @@ let keys = {
     'X': false
 };
 
+// Add particle system arrays
+let particles = [];
+let engineTrails = [];
+
+// Particle class
+class Particle {
+    constructor(x, y, color, type) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.type = type; // 'explosion' or 'engine'
+        this.size = type === 'explosion' ? Math.random() * 3 + 2 : Math.random() * 2 + 1;
+        this.speedX = type === 'explosion' 
+            ? (Math.random() - 0.5) * 8
+            : -Math.random() * 2 - 2;
+        this.speedY = type === 'explosion'
+            ? (Math.random() - 0.5) * 8
+            : (Math.random() - 0.5) * 2;
+        this.life = type === 'explosion' ? 1 : 0.5;
+        this.alpha = 1;
+    }
+
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.life -= 0.02;
+        this.alpha = this.life;
+        
+        if (this.type === 'engine') {
+            this.size *= 0.95;
+        }
+        
+        return this.life > 0;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// Add screen shake variables
+let screenShake = 0;
+let screenShakeIntensity = 0;
+
+// Function to create explosion
+function createExplosion(x, y, color) {
+    for (let i = 0; i < 30; i++) {
+        particles.push(new Particle(x, y, color, 'explosion'));
+    }
+    screenShake = 10;
+    screenShakeIntensity = 5;
+}
+
+// Function to create engine trail
+function createEngineTrail(x, y) {
+    if (Math.random() < 0.3) { // Only create particles sometimes to avoid too many
+        engineTrails.push(new Particle(
+            x,
+            y + Math.random() * 10 - 5,
+            `hsl(${Math.random() * 30 + 20}, 100%, 50%)`,
+            'engine'
+        ));
+    }
+}
+
 // Initialize game
 function init() {
     canvas = document.getElementById('gameCanvas');
@@ -391,8 +462,9 @@ function checkCollisions() {
         // Check obstacle collisions
         for (let j = obstacles.length - 1; j >= 0; j--) {
             if (isColliding(bullets[i], obstacles[j])) {
+                createExplosion(bullets[i].x, bullets[i].y, '#888888');
                 bullets.splice(i, 1);
-                break; // Break after bullet is destroyed
+                break;
             }
         }
         
@@ -400,6 +472,9 @@ function checkCollisions() {
         if (bullets[i]) {
             for (let j = enemies.length - 1; j >= 0; j--) {
                 if (isColliding(bullets[i], enemies[j])) {
+                    createExplosion(enemies[j].x + enemies[j].width/2, 
+                                  enemies[j].y + enemies[j].height/2, 
+                                  '#ff3333');
                     bullets.splice(i, 1);
                     enemies.splice(j, 1);
                     score += 100;
@@ -407,6 +482,25 @@ function checkCollisions() {
                     player.health = Math.min(INITIAL_HEALTH, player.health + 5);
                     break;
                 }
+            }
+        }
+    }
+    
+    // Check player collision with enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        if (isColliding(player, enemies[i])) {
+            createExplosion(enemies[i].x + enemies[i].width/2, 
+                          enemies[i].y + enemies[i].height/2, 
+                          '#ff3333');
+            enemies.splice(i, 1);
+            player.health -= 20;
+            screenShake = 15;
+            screenShakeIntensity = 8;
+            if (player.health <= 0) {
+                createExplosion(player.x + player.width/2, 
+                              player.y + player.height/2, 
+                              '#00ff00');
+                gameOver();
             }
         }
     }
@@ -467,40 +561,81 @@ function isColliding(rect1, rect2) {
 
 // Drawing functions
 function draw() {
-    // Draw player (plane)
+    // Draw player (rocket ship)
     ctx.save(); // Save the current context state
+    
+    // Draw engine flame
+    const flameSize = 20;
+    const flameGradient = ctx.createLinearGradient(
+        player.x - flameSize, player.y + player.height/2,
+        player.x + flameSize, player.y + player.height/2
+    );
+    flameGradient.addColorStop(0, 'rgba(255, 100, 0, 0)');
+    flameGradient.addColorStop(0.5, 'rgba(255, 200, 0, 0.8)');
+    flameGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+    
+    ctx.fillStyle = flameGradient;
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y + player.height * 0.3);
+    ctx.lineTo(player.x - flameSize, player.y + player.height/2);
+    ctx.lineTo(player.x, player.y + player.height * 0.7);
+    ctx.fill();
+    
+    // Draw rocket body
     ctx.fillStyle = '#00ff00';
     ctx.strokeStyle = '#008800';
     ctx.lineWidth = 2;
     
-    // Draw plane body
+    // Main body (elongated)
     ctx.beginPath();
-    ctx.moveTo(player.x + player.width, player.y + player.height/2); // Nose of the plane
-    ctx.lineTo(player.x + player.width * 0.2, player.y + player.height * 0.2); // Top of body
-    ctx.lineTo(player.x, player.y + player.height * 0.5); // Back of body
-    ctx.lineTo(player.x + player.width * 0.2, player.y + player.height * 0.8); // Bottom of body
+    ctx.moveTo(player.x + player.width, player.y + player.height/2); // Nose
+    ctx.lineTo(player.x + player.width * 0.7, player.y + player.height * 0.2); // Top curve
+    ctx.lineTo(player.x + player.width * 0.3, player.y + player.height * 0.2); // Top body
+    ctx.lineTo(player.x, player.y + player.height * 0.35); // Top back
+    ctx.lineTo(player.x, player.y + player.height * 0.65); // Bottom back
+    ctx.lineTo(player.x + player.width * 0.3, player.y + player.height * 0.8); // Bottom body
+    ctx.lineTo(player.x + player.width * 0.7, player.y + player.height * 0.8); // Bottom curve
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-
-    // Draw wing
+    
+    // Draw window
+    ctx.fillStyle = '#99ffff'; // Light blue for window
     ctx.beginPath();
-    ctx.moveTo(player.x + player.width * 0.5, player.y + player.height * 0.3); // Top of wing
-    ctx.lineTo(player.x + player.width * 0.6, player.y); // Wing tip
-    ctx.lineTo(player.x + player.width * 0.7, player.y + player.height * 0.3); // Back of wing
-    ctx.closePath();
+    ctx.arc(
+        player.x + player.width * 0.6,
+        player.y + player.height * 0.5,
+        player.height * 0.15,
+        0, Math.PI * 2
+    );
     ctx.fill();
     ctx.stroke();
-
-    // Draw tail
+    
+    // Draw fins
+    ctx.fillStyle = '#00ff00';
+    
+    // Top fin
     ctx.beginPath();
-    ctx.moveTo(player.x + player.width * 0.2, player.y + player.height * 0.2); // Top of tail
-    ctx.lineTo(player.x, player.y); // Tail tip
-    ctx.lineTo(player.x + player.width * 0.3, player.y + player.height * 0.3); // Back of tail
-    ctx.closePath();
+    ctx.moveTo(player.x + player.width * 0.5, player.y + player.height * 0.2);
+    ctx.lineTo(player.x + player.width * 0.3, player.y);
+    ctx.lineTo(player.x + player.width * 0.15, player.y + player.height * 0.2);
     ctx.fill();
     ctx.stroke();
-
+    
+    // Bottom fin
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.width * 0.5, player.y + player.height * 0.8);
+    ctx.lineTo(player.x + player.width * 0.3, player.y + player.height);
+    ctx.lineTo(player.x + player.width * 0.15, player.y + player.height * 0.8);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Add some detail lines
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.width * 0.3, player.y + player.height * 0.2);
+    ctx.lineTo(player.x + player.width * 0.3, player.y + player.height * 0.8);
+    ctx.stroke();
+    
     ctx.restore(); // Restore the context state
     
     // Draw bullets with improved visibility
@@ -565,17 +700,71 @@ function draw() {
     });
     
     // Draw enemies
-    ctx.fillStyle = '#ff00ff';
     enemies.forEach(enemy => {
-        // Draw enemy plane (simpler design)
+        ctx.save(); // Save context state
+        
+        // Draw enemy ship body
+        ctx.fillStyle = '#ff0033'; // Bright red base color
+        ctx.strokeStyle = '#990000'; // Darker red outline
+        ctx.lineWidth = 2;
+        
+        // Main body (pointed shape)
         ctx.beginPath();
         ctx.moveTo(enemy.x, enemy.y + enemy.height/2); // Nose
-        ctx.lineTo(enemy.x + enemy.width * 0.8, enemy.y); // Top
-        ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height/2); // Back
-        ctx.lineTo(enemy.x + enemy.width * 0.8, enemy.y + enemy.height); // Bottom
+        ctx.lineTo(enemy.x + enemy.width * 0.4, enemy.y + enemy.height * 0.2); // Top front
+        ctx.lineTo(enemy.x + enemy.width * 0.8, enemy.y + enemy.height * 0.2); // Top back
+        ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height * 0.5); // Back
+        ctx.lineTo(enemy.x + enemy.width * 0.8, enemy.y + enemy.height * 0.8); // Bottom back
+        ctx.lineTo(enemy.x + enemy.width * 0.4, enemy.y + enemy.height * 0.8); // Bottom front
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        
+        // Draw wing details
+        ctx.fillStyle = '#cc0000'; // Slightly darker red for wings
+        
+        // Top wing
+        ctx.beginPath();
+        ctx.moveTo(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.2);
+        ctx.lineTo(enemy.x + enemy.width * 0.6, enemy.y);
+        ctx.lineTo(enemy.x + enemy.width * 0.7, enemy.y + enemy.height * 0.2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Bottom wing
+        ctx.beginPath();
+        ctx.moveTo(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.8);
+        ctx.lineTo(enemy.x + enemy.width * 0.6, enemy.y + enemy.height);
+        ctx.lineTo(enemy.x + enemy.width * 0.7, enemy.y + enemy.height * 0.8);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Add engine glow
+        const gradient = ctx.createRadialGradient(
+            enemy.x + enemy.width, enemy.y + enemy.height/2, 0,
+            enemy.x + enemy.width, enemy.y + enemy.height/2, enemy.width * 0.5
+        );
+        gradient.addColorStop(0, 'rgba(255, 100, 0, 0.5)');
+        gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(enemy.x + enemy.width, enemy.y + enemy.height/2, enemy.width * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add cockpit
+        ctx.fillStyle = '#660000'; // Dark red
+        ctx.beginPath();
+        ctx.ellipse(
+            enemy.x + enemy.width * 0.3,
+            enemy.y + enemy.height * 0.5,
+            enemy.width * 0.15,
+            enemy.height * 0.15,
+            0, 0, Math.PI * 2
+        );
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.restore(); // Restore context state
     });
     
     // Draw crates
@@ -916,12 +1105,43 @@ function startGame() {
 function update() {
     if (isGameOver) return;
     
-    // Clear canvas
+    // Clear canvas with screen shake
+    ctx.save();
+    if (screenShake > 0) {
+        const shakeX = Math.random() * screenShakeIntensity * 2 - screenShakeIntensity;
+        const shakeY = Math.random() * screenShakeIntensity * 2 - screenShakeIntensity;
+        ctx.translate(shakeX, shakeY);
+        screenShake--;
+        screenShakeIntensity *= 0.9;
+    }
+    
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
     // Update and draw background
     updateStars();
     drawBackground();
+    
+    // Create engine trails for player
+    createEngineTrail(player.x, player.y + player.height * 0.3);
+    createEngineTrail(player.x, player.y + player.height * 0.7);
+    
+    // Update engine trails
+    engineTrails = engineTrails.filter(particle => {
+        const isAlive = particle.update();
+        if (isAlive) {
+            particle.draw(ctx);
+        }
+        return isAlive;
+    });
+    
+    // Update explosion particles
+    particles = particles.filter(particle => {
+        const isAlive = particle.update();
+        if (isAlive) {
+            particle.draw(ctx);
+        }
+        return isAlive;
+    });
     
     // Update player
     updatePlayer();
@@ -949,6 +1169,8 @@ function update() {
     // Update score
     score++;
     updateScore();
+    
+    ctx.restore();
 }
 
 // Start the game when the page loads
