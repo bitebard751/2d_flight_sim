@@ -17,6 +17,10 @@ const HEALTH_PACK_HEAL = 20; // Health restored per health pack
 const ENEMY_DAMAGE = 10; // Damage per enemy bullet
 const ENEMY_SHOOT_RATE = 2000; // milliseconds
 
+// Add background constants
+const STAR_COUNT = 100;
+const STAR_SPEED_MULTIPLIER = 0.5;
+
 // Game state
 let canvas, ctx;
 let player = {
@@ -39,6 +43,9 @@ let highScore = localStorage.getItem('highScore') || 0;
 let gameLoop;
 let isGameOver = false;
 
+// Add background state
+let stars = [];
+
 // Initialize game
 function init() {
     canvas = document.getElementById('gameCanvas');
@@ -47,6 +54,16 @@ function init() {
     // Set canvas size
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
+    
+    // Initialize stars
+    for (let i = 0; i < STAR_COUNT; i++) {
+        stars.push({
+            x: Math.random() * CANVAS_WIDTH,
+            y: Math.random() * CANVAS_HEIGHT,
+            size: Math.random() * 2 + 1,
+            speed: Math.random() * 2 + 1
+        });
+    }
     
     // Set up event listeners
     document.addEventListener('keydown', handleKeyDown);
@@ -92,6 +109,10 @@ function update() {
     
     // Clear canvas
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // Update and draw background
+    updateStars();
+    drawBackground();
     
     // Update player
     updatePlayer();
@@ -266,6 +287,11 @@ function isSpawnPositionSafe(x, y, width, height) {
 
 // Modify crate spawn function
 function spawnCrate() {
+    // Only spawn if there are no crates on screen
+    if (crates.length > 0) {
+        return;
+    }
+
     let attempts = 0;
     const maxAttempts = 10;
     let y;
@@ -290,6 +316,11 @@ function spawnCrate() {
 
 // Modify health pack spawn function
 function spawnHealthPack() {
+    // Only spawn if there are no health packs on screen
+    if (healthPacks.length > 0) {
+        return;
+    }
+
     let attempts = 0;
     const maxAttempts = 10;
     let y;
@@ -578,6 +609,32 @@ function updateHealthPacks() {
     healthPacks = healthPacks.filter(pack => {
         pack.x -= pack.speed;
         return pack.x > -pack.width;
+    });
+}
+
+// Add function to update stars
+function updateStars() {
+    stars.forEach(star => {
+        star.x -= star.speed * STAR_SPEED_MULTIPLIER;
+        if (star.x < 0) {
+            star.x = CANVAS_WIDTH;
+            star.y = Math.random() * CANVAS_HEIGHT;
+        }
+    });
+}
+
+// Add function to draw background
+function drawBackground() {
+    // Fill background with dark color
+    ctx.fillStyle = '#000033';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // Draw stars
+    ctx.fillStyle = '#ffffff';
+    stars.forEach(star => {
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
     });
 }
 
