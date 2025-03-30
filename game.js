@@ -6,8 +6,8 @@ const BULLET_SPEED = 7;
 const ENEMY_BULLET_SPEED = 5;
 const OBSTACLE_SPEED = 3;
 const ENEMY_SPEED = 2;
-const OBSTACLE_SPAWN_RATE = 2000; // milliseconds
-const ENEMY_SPAWN_RATE = 3000; // milliseconds
+const OBSTACLE_SPAWN_RATE = 1000; // Changed from 2000 to 1000 (spawns every 1 second)
+const ENEMY_SPAWN_RATE = 1500; // Changed from 3000 to 1500 (spawns every 1.5 seconds)
 const CRATE_SPAWN_RATE = 5000; // milliseconds
 const HEALTH_PACK_SPAWN_RATE = 7000; // milliseconds
 const INITIAL_AMMO = 20; // Starting ammunition
@@ -16,6 +16,11 @@ const INITIAL_HEALTH = 100; // Starting health
 const HEALTH_PACK_HEAL = 20; // Health restored per health pack
 const ENEMY_DAMAGE = 10; // Damage per enemy bullet
 const ENEMY_SHOOT_RATE = 2000; // milliseconds
+const SPEED_INCREASE_INTERVAL = 10000; // 10 seconds
+const SPEED_INCREASE_FACTOR = 1.1; // 10% increase
+const SPREAD_SHOT_AMMO_COST = 3; // Cost in ammo for spread shot
+const SPREAD_SHOT_COOLDOWN = 1500; // Increased from 500 to 1500ms (1.5 seconds)
+const SPREAD_SHOT_BULLETS = 5; // Number of bullets in spread shot
 
 // Add background constants
 const STAR_COUNT = 100;
@@ -33,21 +38,48 @@ let player = {
     health: INITIAL_HEALTH
 };
 let bullets = [];
-let enemyBullets = []; // Array for enemy bullets
+let enemyBullets = [];
 let obstacles = [];
 let enemies = [];
-let crates = []; // Array for bullet crates
-let healthPacks = []; // Array for health packs
+let crates = [];
+let healthPacks = [];
 let score = 0;
 let highScore = localStorage.getItem('highScore') || 0;
 let gameLoop;
 let isGameOver = false;
+
+// Add spawn interval variables
+let obstacleSpawnInterval;
+let enemySpawnInterval;
+let crateSpawnInterval;
+let healthPackSpawnInterval;
+let speedIncreaseInterval;
+
+// Add speed state
+let currentObstacleSpeed = OBSTACLE_SPEED;
+let currentEnemySpeed = ENEMY_SPEED;
+let currentEnemyBulletSpeed = ENEMY_BULLET_SPEED;
 
 // Add background state
 let stars = [];
 
 // Add sound effects
 let shootSound;
+
+// Add spread shot cooldown
+let lastSpreadShotTime = 0;
+
+// Add menu state
+let isInMenu = true;
+
+// Player controls
+let keys = {
+    ArrowUp: false,
+    ArrowDown: false,
+    ' ': false,
+    'x': false,
+    'X': false
+};
 
 // Initialize game
 function init() {
@@ -70,49 +102,20 @@ function init() {
     
     // Initialize sound effects
     shootSound = new Audio('assets/sounds/shoot.mp3');
-    shootSound.volume = 0.3; // Set volume to 30%
+    shootSound.volume = 0.3;
     
     // Set up event listeners
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
     document.getElementById('restartButton').addEventListener('click', restartGame);
     
-    // Start game
-    startGame();
+    // Start menu animation loop
+    requestAnimationFrame(menuLoop);
 }
 
-// Start game
-function startGame() {
-    // Reset game state
-    player.y = CANVAS_HEIGHT / 2;
-    player.ammo = INITIAL_AMMO;
-    player.health = INITIAL_HEALTH;
-    bullets = [];
-    enemyBullets = [];
-    obstacles = [];
-    enemies = [];
-    crates = [];
-    healthPacks = [];
-    score = 0;
-    isGameOver = false;
-    
-    // Update score display
-    updateScore();
-    
-    // Hide game over screen
-    document.getElementById('gameOver').classList.add('hidden');
-    
-    // Start game loop and spawners
-    gameLoop = setInterval(update, 1000 / 60);
-    setInterval(spawnObstacle, OBSTACLE_SPAWN_RATE);
-    setInterval(spawnEnemy, ENEMY_SPAWN_RATE);
-    setInterval(spawnCrate, CRATE_SPAWN_RATE);
-    setInterval(spawnHealthPack, HEALTH_PACK_SPAWN_RATE);
-}
-
-// Game loop
-function update() {
-    if (isGameOver) return;
+// Menu animation loop
+function menuLoop() {
+    if (!isInMenu) return;
     
     // Clear canvas
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -121,47 +124,61 @@ function update() {
     updateStars();
     drawBackground();
     
-    // Update player
-    updatePlayer();
+    // Draw menu
+    drawMenu();
     
-    // Update bullets
-    updateBullets();
-    updateEnemyBullets();
-    
-    // Update obstacles
-    updateObstacles();
-    
-    // Update enemies and their shooting
-    updateEnemies();
-    
-    // Update crates and health packs
-    updateCrates();
-    updateHealthPacks();
-    
-    // Check collisions
-    checkCollisions();
-    
-    // Draw everything
-    draw();
-    
-    // Update score
-    score++;
-    updateScore();
+    requestAnimationFrame(menuLoop);
 }
 
-// Player controls
-let keys = {
-    ArrowUp: false,
-    ArrowDown: false,
-    ' ': false  // Changed from 'Space' to actual space character
-};
-
-function handleKeyDown(e) {
-    console.log('Key pressed:', e.key); // Debug log to see what key is being pressed
+// Draw menu function
+function drawMenu() {
+    // Draw title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPACE DEFENDER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
     
-    if (e.key === ' ' || e.key === 'Spacebar') { // Handle both space representations
-        e.preventDefault(); // Prevent page scrolling
+    // Draw animated subtitle
+    const pulseAmount = Math.sin(Date.now() / 500) * 0.2 + 0.8; // Pulsing effect
+    ctx.font = `${24 * pulseAmount}px Arial`;
+    ctx.fillStyle = `rgba(255, 255, 255, ${pulseAmount})`;
+    ctx.fillText('Press ENTER to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    
+    // Draw controls
+    ctx.font = '20px Arial';
+    ctx.fillStyle = '#aaaaaa';
+    const controlsY = CANVAS_HEIGHT * 0.7;
+    ctx.fillText('Controls:', CANVAS_WIDTH / 2, controlsY);
+    ctx.fillText('↑/↓ - Move Ship', CANVAS_WIDTH / 2, controlsY + 30);
+    ctx.fillText('SPACE - Shoot', CANVAS_WIDTH / 2, controlsY + 60);
+    ctx.fillText('X - Spread Shot', CANVAS_WIDTH / 2, controlsY + 90);
+    
+    // Draw high score
+    ctx.font = '24px Arial';
+    ctx.fillStyle = '#ffff00';
+    ctx.fillText(`High Score: ${highScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 50);
+}
+
+// Modify handleKeyDown to handle menu state
+function handleKeyDown(e) {
+    if (isInMenu && e.key === 'Enter') {
+        isInMenu = false;
+        startGame();
+        return;
+    }
+    
+    if (isInMenu) return; // Ignore other keys while in menu
+    
+    console.log('Key pressed:', e.key);
+    
+    if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
         shoot();
+    }
+    
+    if (e.key === 'x' || e.key === 'X') {
+        e.preventDefault();
+        shootSpreadShot();
     }
     
     if (keys.hasOwnProperty(e.key)) {
@@ -172,6 +189,11 @@ function handleKeyDown(e) {
 function handleKeyUp(e) {
     if (e.key === ' ' || e.key === 'Spacebar') {
         keys[' '] = false;
+    }
+    
+    if (e.key === 'x' || e.key === 'X') {
+        keys['x'] = false;
+        keys['X'] = false;
     }
     
     if (keys.hasOwnProperty(e.key)) {
@@ -227,8 +249,16 @@ function shoot() {
 
 function updateBullets() {
     bullets = bullets.filter(bullet => {
-        bullet.x += bullet.speed;
-        return bullet.x < CANVAS_WIDTH;
+        if (bullet.dx && bullet.dy) {
+            // Spread shot bullets
+            bullet.x += bullet.dx * bullet.speed;
+            bullet.y += bullet.dy * bullet.speed;
+        } else {
+            // Regular bullets
+            bullet.x += bullet.speed;
+        }
+        return bullet.x < CANVAS_WIDTH && bullet.x > 0 && 
+               bullet.y > 0 && bullet.y < CANVAS_HEIGHT;
     });
 }
 
@@ -236,10 +266,10 @@ function updateBullets() {
 function spawnObstacle() {
     obstacles.push({
         x: CANVAS_WIDTH,
-        y: Math.random() * (CANVAS_HEIGHT - 40),
-        width: 20,
-        height: 40,
-        speed: OBSTACLE_SPEED
+        y: Math.random() * (CANVAS_HEIGHT - 80), // Adjusted for larger height
+        width: 40,  // Doubled from 20
+        height: 80, // Doubled from 40
+        speed: currentObstacleSpeed
     });
 }
 
@@ -257,7 +287,7 @@ function spawnEnemy() {
         y: Math.random() * (CANVAS_HEIGHT - 40),
         width: 40,
         height: 40,
-        speed: ENEMY_SPEED
+        speed: currentEnemySpeed
     });
 }
 
@@ -356,14 +386,27 @@ function spawnHealthPack() {
 
 // Collision detection
 function checkCollisions() {
-    // Check bullet collisions with enemies
+    // Check bullet collisions with obstacles and enemies
     for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = enemies.length - 1; j >= 0; j--) {
-            if (isColliding(bullets[i], enemies[j])) {
+        // Check obstacle collisions
+        for (let j = obstacles.length - 1; j >= 0; j--) {
+            if (isColliding(bullets[i], obstacles[j])) {
                 bullets.splice(i, 1);
-                enemies.splice(j, 1);
-                score += 100;
-                break; // Break inner loop after collision
+                break; // Break after bullet is destroyed
+            }
+        }
+        
+        // Check enemy collisions (only if bullet wasn't destroyed by obstacle)
+        if (bullets[i]) {
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                if (isColliding(bullets[i], enemies[j])) {
+                    bullets.splice(i, 1);
+                    enemies.splice(j, 1);
+                    score += 100;
+                    // Add health when killing an enemy
+                    player.health = Math.min(INITIAL_HEALTH, player.health + 5);
+                    break;
+                }
             }
         }
     }
@@ -470,10 +513,55 @@ function draw() {
         ctx.shadowBlur = 0; // Reset shadow
     });
     
-    // Draw obstacles
-    ctx.fillStyle = '#ff0000';
+    // Draw obstacles as circular asteroids with craters
     obstacles.forEach(obstacle => {
-        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        // Save context state
+        ctx.save();
+        
+        const centerX = obstacle.x + obstacle.width / 2;
+        const centerY = obstacle.y + obstacle.height / 2;
+        // Use the larger dimension to ensure the asteroid fills its hitbox
+        const radius = Math.min(obstacle.width, obstacle.height) / 2;
+        
+        // Draw main asteroid body (ellipse to match rectangular hitbox)
+        ctx.beginPath();
+        // Scale the context to draw a circular asteroid as an ellipse
+        ctx.translate(centerX, centerY);
+        ctx.scale(obstacle.width / obstacle.height, 1);
+        ctx.arc(0, 0, radius * (obstacle.height / obstacle.width), 0, Math.PI * 2);
+        ctx.scale(obstacle.height / obstacle.width, 1); // Reset scale for the fill/stroke
+        ctx.translate(-centerX, -centerY);
+        
+        ctx.fillStyle = '#2c3347';  // Dark blue-gray
+        ctx.fill();
+        ctx.strokeStyle = '#4a5464';  // Lighter blue-gray
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Draw craters
+        const numCraters = 7;  // Increased number of craters for larger area
+        ctx.fillStyle = '#1a1f2b';  // Darker color for craters
+        
+        for (let i = 0; i < numCraters; i++) {
+            const angle = (Math.PI * 2 * i) / numCraters + (obstacle.x % 1);
+            // Adjust crater positions to match elliptical shape
+            const craterX = centerX + (Math.cos(angle) * (obstacle.width / 2) * 0.6);
+            const craterY = centerY + (Math.sin(angle) * (obstacle.height / 2) * 0.6);
+            const craterRadius = Math.min(obstacle.width, obstacle.height) * 0.15;
+            
+            ctx.beginPath();
+            ctx.arc(craterX, craterY, craterRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Debug hitbox (uncomment to see hitbox)
+        /*
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        */
+        
+        ctx.restore();
     });
     
     // Draw enemies
@@ -499,7 +587,7 @@ function draw() {
         ctx.fill();
         ctx.stroke();
         
-        // Draw ammo symbol
+        // Draw ammo symbol (lightning bolt)
         ctx.fillStyle = '#000000';
         ctx.font = '15px Arial';
         ctx.fillText('⚡', crate.x + 8, crate.y + 20);
@@ -556,12 +644,53 @@ function draw() {
     ctx.font = '20px Arial';
     ctx.fillText(`Ammo: ${player.ammo}`, 10, 60);
     ctx.fillText(`Bullets: ${bullets.length}`, 10, 30);
+    
+    // Draw spread shot indicator and cooldown
+    const currentTime = Date.now();
+    const timeSinceLastSpreadShot = currentTime - lastSpreadShotTime;
+    const cooldownPercent = Math.min(1, timeSinceLastSpreadShot / SPREAD_SHOT_COOLDOWN);
+    const canSpreadShot = player.ammo >= SPREAD_SHOT_AMMO_COST && cooldownPercent >= 1;
+    
+    // Draw spread shot text
+    ctx.fillStyle = canSpreadShot ? '#00ff00' : '#ff0000';
+    ctx.font = '16px Arial';
+    ctx.fillText('Press X for Spread Shot', 10, 90);
+    ctx.fillText(`Costs ${SPREAD_SHOT_AMMO_COST} ammo`, 10, 110);
+    
+    // Draw cooldown bar
+    const barWidth = 200;
+    const barHeight = 10;
+    const barX = 10;
+    const barY = 130;
+    
+    // Draw bar background
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    
+    // Draw cooldown progress
+    ctx.fillStyle = '#00ff00';
+    ctx.fillRect(barX, barY, barWidth * cooldownPercent, barHeight);
+    
+    // Draw cooldown text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px Arial';
+    if (cooldownPercent < 1) {
+        const remainingCooldown = ((SPREAD_SHOT_COOLDOWN - timeSinceLastSpreadShot) / 1000).toFixed(1);
+        ctx.fillText(`Cooldown: ${remainingCooldown}s`, barX + barWidth + 10, barY + 8);
+    } else {
+        ctx.fillText('Ready!', barX + barWidth + 10, barY + 8);
+    }
 }
 
 // Game over handling
 function gameOver() {
     isGameOver = true;
     clearInterval(gameLoop);
+    clearInterval(obstacleSpawnInterval);
+    clearInterval(enemySpawnInterval);
+    clearInterval(crateSpawnInterval);
+    clearInterval(healthPackSpawnInterval);
+    clearInterval(speedIncreaseInterval);
     
     if (score > highScore) {
         highScore = score;
@@ -570,6 +699,20 @@ function gameOver() {
     
     document.getElementById('finalScore').textContent = score;
     document.getElementById('gameOver').classList.remove('hidden');
+    
+    // Remove any existing menu buttons first
+    const existingMenuButtons = document.querySelectorAll('#gameOver button:not(#restartButton)');
+    existingMenuButtons.forEach(button => button.remove());
+    
+    // Add button to return to menu
+    const menuButton = document.createElement('button');
+    menuButton.textContent = 'Return to Menu';
+    menuButton.onclick = () => {
+        document.getElementById('gameOver').classList.add('hidden');
+        isInMenu = true;
+        requestAnimationFrame(menuLoop);
+    };
+    document.getElementById('gameOver').appendChild(menuButton);
 }
 
 function restartGame() {
@@ -593,7 +736,7 @@ function enemyShoot(enemy) {
         y: enemy.y + enemy.height/2,
         width: 10,
         height: 4,
-        speed: ENEMY_BULLET_SPEED,
+        speed: currentEnemyBulletSpeed,
         dx: Math.cos(angle),
         dy: Math.sin(angle)
     });
@@ -647,6 +790,165 @@ function drawBackground() {
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fill();
     });
+}
+
+// Add function to increase speeds
+function increaseSpeeds() {
+    if (isGameOver) return;
+    
+    // Increase speeds
+    currentObstacleSpeed *= SPEED_INCREASE_FACTOR;
+    currentEnemySpeed *= SPEED_INCREASE_FACTOR;
+    currentEnemyBulletSpeed *= SPEED_INCREASE_FACTOR;
+    
+    // Update enemy speeds
+    enemies.forEach(enemy => {
+        enemy.speed = currentEnemySpeed;
+    });
+    
+    // Update obstacle speeds
+    obstacles.forEach(obstacle => {
+        obstacle.speed = currentObstacleSpeed;
+    });
+    
+    // Update enemy bullet speeds
+    enemyBullets.forEach(bullet => {
+        bullet.speed = currentEnemyBulletSpeed;
+    });
+    
+    console.log('Speeds increased! Current speeds:', {
+        obstacleSpeed: currentObstacleSpeed,
+        enemySpeed: currentEnemySpeed,
+        enemyBulletSpeed: currentEnemyBulletSpeed
+    });
+}
+
+// Add spread shot function
+function shootSpreadShot() {
+    const currentTime = Date.now();
+    if (currentTime - lastSpreadShotTime < SPREAD_SHOT_COOLDOWN) {
+        console.log('Spread shot cooling down...');
+        return;
+    }
+    
+    if (player.ammo < SPREAD_SHOT_AMMO_COST) {
+        console.log('Not enough ammo for spread shot!');
+        return;
+    }
+    
+    // Play shooting sound
+    shootSound.currentTime = 0;
+    shootSound.play().catch(error => console.log('Error playing sound:', error));
+    
+    lastSpreadShotTime = currentTime;
+    player.ammo -= SPREAD_SHOT_AMMO_COST;
+    
+    // Calculate spread angles
+    const spreadAngle = Math.PI / 6; // 30 degrees total spread
+    const angleStep = spreadAngle / (SPREAD_SHOT_BULLETS - 1);
+    const startAngle = -spreadAngle / 2;
+    
+    // Create spread shot bullets
+    for (let i = 0; i < SPREAD_SHOT_BULLETS; i++) {
+        const angle = startAngle + (i * angleStep);
+        const newBullet = {
+            x: player.x + player.width,
+            y: player.y + (player.height / 2) - 2.5,
+            width: 15,
+            height: 8,
+            speed: BULLET_SPEED,
+            dx: Math.cos(angle),
+            dy: Math.sin(angle)
+        };
+        
+        bullets.push(newBullet);
+    }
+    
+    console.log('Spread shot fired! Ammo remaining:', player.ammo);
+}
+
+// Modify startGame function
+function startGame() {
+    isInMenu = false;
+    
+    // Reset game state
+    player.y = CANVAS_HEIGHT / 2;
+    player.ammo = INITIAL_AMMO;
+    player.health = INITIAL_HEALTH;
+    bullets = [];
+    enemyBullets = [];
+    obstacles = [];
+    enemies = [];
+    crates = [];
+    healthPacks = [];
+    score = 0;
+    isGameOver = false;
+    
+    // Reset speeds
+    currentObstacleSpeed = OBSTACLE_SPEED;
+    currentEnemySpeed = ENEMY_SPEED;
+    currentEnemyBulletSpeed = ENEMY_BULLET_SPEED;
+    
+    // Update score display
+    updateScore();
+    
+    // Hide game over screen
+    document.getElementById('gameOver').classList.add('hidden');
+    
+    // Clear any existing intervals
+    clearInterval(gameLoop);
+    clearInterval(obstacleSpawnInterval);
+    clearInterval(enemySpawnInterval);
+    clearInterval(crateSpawnInterval);
+    clearInterval(healthPackSpawnInterval);
+    clearInterval(speedIncreaseInterval);
+    
+    // Start game loop and spawners
+    gameLoop = setInterval(update, 1000 / 60);
+    obstacleSpawnInterval = setInterval(spawnObstacle, OBSTACLE_SPAWN_RATE);
+    enemySpawnInterval = setInterval(spawnEnemy, ENEMY_SPAWN_RATE);
+    crateSpawnInterval = setInterval(spawnCrate, CRATE_SPAWN_RATE);
+    healthPackSpawnInterval = setInterval(spawnHealthPack, HEALTH_PACK_SPAWN_RATE);
+    speedIncreaseInterval = setInterval(increaseSpeeds, SPEED_INCREASE_INTERVAL);
+}
+
+// Add game update function
+function update() {
+    if (isGameOver) return;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // Update and draw background
+    updateStars();
+    drawBackground();
+    
+    // Update player
+    updatePlayer();
+    
+    // Update bullets
+    updateBullets();
+    updateEnemyBullets();
+    
+    // Update obstacles
+    updateObstacles();
+    
+    // Update enemies and their shooting
+    updateEnemies();
+    
+    // Update crates and health packs
+    updateCrates();
+    updateHealthPacks();
+    
+    // Check collisions
+    checkCollisions();
+    
+    // Draw everything
+    draw();
+    
+    // Update score
+    score++;
+    updateScore();
 }
 
 // Start the game when the page loads

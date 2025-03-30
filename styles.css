@@ -5,11 +5,13 @@
 }
 
 body {
-    background-color: #1a1a1a;
+    margin: 0;
+    padding: 0;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    background: #000;
     font-family: Arial, sans-serif;
 }
 
@@ -22,6 +24,74 @@ body {
 #gameCanvas {
     background-color: #000;
     border: 2px solid #333;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+}
+
+#gameContainer {
+    position: relative;
+}
+
+#score {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: #fff;
+    font-size: 20px;
+}
+
+#gameOver {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+    border: 2px solid #333;
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+}
+
+#gameOver.hidden {
+    display: none;
+}
+
+#gameOver h2 {
+    color: #ff0000;
+    font-size: 36px;
+    margin: 0 0 20px 0;
+}
+
+#finalScore {
+    color: #fff;
+    font-size: 24px;
+    margin: 10px 0;
+}
+
+button {
+    background: #1a1a1a;
+    color: #fff;
+    border: 2px solid #333;
+    padding: 10px 20px;
+    font-size: 18px;
+    margin: 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+}
+
+button:hover {
+    background: #333;
+    border-color: #666;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+#restartButton {
+    background: #006600;
+}
+
+#restartButton:hover {
+    background: #008800;
 }
 
 .game-info {
