@@ -65,6 +65,7 @@ let stars = [];
 
 // Add sound effects
 let shootSound;
+let gameOverSound;
 
 // Add spread shot cooldown
 let lastSpreadShotTime = 0;
@@ -174,6 +175,8 @@ function init() {
     // Initialize sound effects
     shootSound = new Audio('assets/sounds/shoot.mp3');
     shootSound.volume = 0.3;
+    gameOverSound = new Audio('assets/sounds/explosion.mp3');
+    gameOverSound.volume = 0.5; // Make it a bit quieter than the explosion sound
     
     // Set up event listeners
     document.addEventListener('keydown', handleKeyDown);
@@ -902,6 +905,10 @@ function gameOver() {
         requestAnimationFrame(menuLoop);
     };
     document.getElementById('gameOver').appendChild(menuButton);
+    
+    // Play game over sound
+    gameOverSound.currentTime = 0; // Reset sound to start
+    gameOverSound.play();
 }
 
 function restartGame() {
